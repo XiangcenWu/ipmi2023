@@ -45,3 +45,4 @@ o = o*2
 o.backward()
 
 print(model_0.para.grad, model_2.para.grad)
+
