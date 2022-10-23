@@ -150,16 +150,18 @@ def one_hot_mmd_label(predicted_dice, sigma):
 
     rank = torch.tensor(rankdata(mmd_score, 'min') - 1)
 
-    onehot = F.one_hot(rank)
+    # onehot = F.one_hot(rank)
 
-    bos = F.one_hot(torch.tensor([0]), batch + 2)
-    eos = F.one_hot(torch.tensor([1]), batch + 2)
-    label = F.pad(onehot, (2, 0))
+    # bos = F.one_hot(torch.tensor([0]), batch + 2)
+    # eos = F.one_hot(torch.tensor([1]), batch + 2)
+    # label = F.pad(onehot, (2, 0))
+    # # decoder input     decoder output label
+    # return torch.cat([bos, label], dim=0), torch.cat([label, eos], dim=0)
 
-    return torch.cat([bos, label], dim=0), torch.cat([label, eos], dim=0)
+    return torch.cat([torch.tensor([batch]), rank]), torch.cat([rank, torch.tensor([batch])])
 
 if __name__ == "__main__":
     x = torch.rand(4, 3)
     label = one_hot_mmd_label(x, 3.)
-    print(label)
+    print(F.one_hot(label[0]))
 

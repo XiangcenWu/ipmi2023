@@ -1,42 +1,46 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class SelectionNet(nn.Module):
 
-    def __init__(self):
+    def __init__(self, num_sequence, d_model, n_head, num_encoder_layers, num_decoder_layers):
         super().__init__()
+        self.num_sequence = num_sequence
         self.relu = nn.ReLU()
         
-        self.down_sample = DownSample([1, 32, 128, 256, 512, 1024])
+        self.down_sample = DownSample([1, 32, 128, 256, 512, d_model])
 
 
-        self.pool_to_vector = nn.AvgPool3d(2)
+        self.pool_to_vector = nn.AvgPool3d((3, 2, 2))
 
 
-        self.attention = nn.Sequential(
-            BatchAttentionModulle(1024, 2, 2),
-            BatchAttentionModulle(1024, 2, 2, 512),
+        self.transformer = nn.Transformer(d_model, n_head, num_encoder_layers, num_decoder_layers)
 
-            BatchAttentionModulle(512, 2, 1),
-            BatchAttentionModulle(512, 2, 1, 128),
+        self.output_embedding = nn.Linear(num_sequence+1, d_model, bias=False)
 
-            BatchAttentionModulle(128, 2, 1),
-            BatchAttentionModulle(128, 2, 1, 1),
-        )
+        self.output = nn.Linear(d_model, num_sequence+1, )
 
         
 
 
-    def forward(self, x):
-        skip_list = self.down_sample(x)
-        test_feature_map = skip_list
-        feature = self.pool_to_vector(test_feature_map).flatten(1) # [B, feature]
-        output = self.attention(feature)
+    def forward(self, x, decoder_input):
+        feature = self.down_sample(x)
+        feature = self.pool_to_vector(feature).flatten(1) # [B, feature]
 
-        return torch.sigmoid(output).softmax(0)
 
-    
+        decoder_input = F.one_hot(decoder_input).to(x.device).float()
+        decoder_input = self.output_embedding(decoder_input)
+
+
+        mask = self.transformer.generate_square_subsequent_mask(self.num_sequence + 1).to(x.device)
+        decoder_output = self.transformer(feature, decoder_input, tgt_mask=mask)
+
+
+        return self.output(decoder_output)
+
+
 
 
 
@@ -113,55 +117,7 @@ class ResBlock(nn.Module):
         )
 
 
-class BatchAttentionModulle(nn.Module):
 
-
-    def __init__(self, vector_size, num_head, mlp_dim=2, down_dim=None):
-        super().__init__()
-        self.num_head = num_head
-        self.vector_size = vector_size
-        head_dim = vector_size // num_head
-        self.scale = head_dim**-0.5
-
-
-        self.layernorm_attn = nn.LayerNorm([vector_size])
-        self.layernorm_ffd = nn.LayerNorm([vector_size])
-                
-        self.qkv = nn.Linear(vector_size, 3*vector_size)
-        self.mlp = nn.Sequential(
-            nn.Linear(vector_size, mlp_dim*vector_size),
-            nn.Linear(mlp_dim*vector_size, vector_size),
-            nn.GELU()
-        )
-        self.tanh = nn.Tanh()
-        self.down = down_dim
-        if down_dim:
-            self.down = nn.Linear(vector_size, down_dim)
-
-
-
-    def forward(self, x):
-        
-        # input shape -> [B, C]
-        batch_size, vector_size = x.shape
-        assert vector_size == self.vector_size
-
-        skip_0 = x
-        qkv = self.qkv(x).reshape(batch_size, 3, self.num_head, vector_size // self.num_head).permute(1, 2, 0, 3)
-        q, k, v = qkv[0], qkv[1], qkv[2]
-        q = q * self.scale
-        attn = q @ k.transpose(-2, -1)
-        x = (attn @ v).transpose(0, 1).flatten(1) + skip_0
-        x = self.layernorm_attn(x)
-
-        skip_1 = x
-        x = self.mlp(x) + skip_1
-        x = self.layernorm_ffd(x)
-
-        if self.down:
-            x = self.down(x)
-        
-        return x
 
 
         
@@ -173,10 +129,23 @@ class BatchAttentionModulle(nn.Module):
 
 if __name__ == "__main__":
     import torch
-    device = "cuda:1"
-    model = SelectionNet().to(device)
-    x = torch.rand(16, 1, 64, 64, 64).to(device)
-    print(model(x))
+    from loss import one_hot_mmd_label
 
+
+    loss_function = nn.CrossEntropyLoss()
+    device = "cuda:0"
+    model = SelectionNet(4, 1024, 8, 4, 4).to(device)
+    x = torch.rand(4, 1, 96, 64, 64).to(device)
     
+
+    x = torch.rand(4, 3)
+    decoder_input, decoder_output_label = one_hot_mmd_label(x, 3.)
+    print(decoder_input, decoder_output_label)
     
+    x = torch.rand(4, 1, 96, 64, 64).to(device)
+    o = model(x, decoder_input)
+
+    loss = loss_function(o, decoder_output_label.to(device).long())
+
+    print(loss)
+
