@@ -121,10 +121,3 @@ if __name__ == "__main__":
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-        
-
-        
-
-        
-
-        
