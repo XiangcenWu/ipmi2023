@@ -109,11 +109,11 @@ if __name__ == "__main__":
             performance = dice_metric(pred, label)
 
         decoder_input, decoder_output_label = one_hot_mmd_label(performance, 3.)
-        print(decoder_output_label)
+        
 
         o = f_select(img, decoder_input)
-        print(o)
-        print(torch.argmax(o, 1))
+        print("label", decoder_output_label)
+        print("pred", torch.argmax(o, 1))
 
         loss = loss_function(o, decoder_output_label.to(device).long())
         print(loss.item())
