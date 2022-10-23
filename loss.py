@@ -1,9 +1,11 @@
 import torch
+import torch.nn.functional as F
 
 from monai.losses import DiceLoss
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
 
+from scipy.stats import rankdata
 
 dice_loss = DiceLoss(
     include_background=True,
@@ -136,6 +138,19 @@ def create_label(num_batch, predicted_dice, sigma=1.):
     label[best_comb] = 1.
     
     return label.view(num_batch, 1), best_comb[0]
+
+
+def one_hot_mmd_label(predicted_dice, sigma):
+    batch, _ = predicted_dice.shape
+    mmd_score = torch.zeros(batch)
+
+    for i in range(batch):
+        mmd_i = mmd(predicted_dice[i].view(-1, 3), predicted_dice.view(-1, 3), 3.)
+        mmd_score[i] = mmd_i
+
+    rank = torch.tensor(rankdata(mmd_score, 'min') - 1)
+
+    return F.one_hot(rank)
 
 if __name__ == "__main__":
     l_all = torch.tensor([
