@@ -13,7 +13,7 @@ class SelectionNet(nn.Module):
         self.down_sample = DownSample([1, 32, 128, 256, 512, d_model])
 
 
-        self.pool_to_vector = nn.AvgPool3d((3, 2, 2))
+        self.pool_to_vector = nn.AvgPool3d((2, 2, 2))
 
 
         self.transformer = nn.Transformer(d_model, n_head, num_encoder_layers, num_decoder_layers)

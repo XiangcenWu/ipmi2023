@@ -25,14 +25,12 @@ from monai.transforms import (
     SpatialPadd
 )
 from monai.losses import DiceLoss
-from loss import create_label, batch_wise_loss, dice_metric
+from loss import create_label, batch_wise_loss, dice_metric, one_hot_mmd_label
 from monai.networks.nets.swin_unetr import SwinUNETR
 from model import SelectionNet
-from tools import delete_from_gpu, change_zero
 #################################################
 # Hyperparameters
 
-sigma=5
 
 
 
@@ -73,55 +71,59 @@ transforms = Compose(
         ),
         CenterSpatialCropd(
             keys=["image", "label"], 
-            roi_size = (96, 64, 64)
+            roi_size = (64, 64, 64)
         ),
         SpatialPadd(
             keys=["image", "label"], 
-            spatial_size=(96, 64, 64)
+            spatial_size=(64, 64, 64)
         ),
     ]
 )
 
 
-
+num_sequence = 12
 
 selection_ds = Dataset(
     data=D_meta_select,
     transform=transforms,
 )
 selection_loader = DataLoader(
-    selection_ds, batch_size=4, shuffle=True, drop_last=False
+    selection_ds, batch_size=num_sequence, shuffle=True, drop_last=False
 )
 device = 'cuda:0'
 # Set the networks and their optimizers
 f_seg = SwinUNETR((64, 64, 64), 1, 3).to(device)
 f_seg.load_state_dict(torch.load("/home/xiangcen/meta_data_select/model/f_seg_v1.pt"))
 f_seg.eval()
-f_select = SelectionNet().to(device)
+f_select = SelectionNet(num_sequence, 1024, 8, 6, 6).to(device)
 optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.001)
+loss_function = torch.nn.CrossEntropyLoss()
 
 
 
-bceloss = torch.nn.BCELoss()
-one_num = torch.tensor([1.]).to(device)
 if __name__ == "__main__":
     for batch in selection_loader:
         img, label = batch["image"].to(device), batch["label"].to(device)
         with torch.no_grad():
             pred = f_seg(img)
             performance = dice_metric(pred, label)
-        
 
-        _, best_comb = create_label(16, performance, 5.)
+        decoder_input, decoder_output_label = one_hot_mmd_label(performance, 3.)
+        print(decoder_output_label)
 
-        selection = f_select(img)
-        print(selection)
-        
-        selection = selection[best_comb]
+        o = f_select(img, decoder_input)
+        print(o)
+        print(torch.argmax(o, 1))
 
-        loss = bceloss(selection, one_num)
+        loss = loss_function(o, decoder_output_label.to(device).long())
         print(loss.item())
+
         loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        
+
+        
 
         
 
