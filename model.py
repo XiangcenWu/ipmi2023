@@ -10,7 +10,7 @@ class SelectionNet(nn.Module):
         self.num_sequence = num_sequence
         self.relu = nn.ReLU()
         
-        self.down_sample = DownSample([1, 32, 128, 256, 512, d_model])
+        self.down_sample = DownSample([1, d_model // 16, d_model // 8, d_model // 4, d_model // 2, d_model])
 
 
         self.pool_to_vector = nn.AvgPool3d((2, 2, 2))
@@ -115,37 +115,3 @@ class ResBlock(nn.Module):
             nn.Conv3d(num_in, num_in, 3, 1, 1),
             nn.Conv3d(num_in, num_in, 1),
         )
-
-
-
-
-
-        
-
-        
-
-        
-
-
-if __name__ == "__main__":
-    import torch
-    from loss import one_hot_mmd_label
-
-
-    loss_function = nn.CrossEntropyLoss()
-    device = "cuda:0"
-    model = SelectionNet(4, 1024, 8, 4, 4).to(device)
-    x = torch.rand(4, 1, 96, 64, 64).to(device)
-    
-
-    x = torch.rand(4, 3)
-    decoder_input, decoder_output_label = one_hot_mmd_label(x, 3.)
-    print(decoder_input, decoder_output_label)
-    
-    x = torch.rand(4, 1, 96, 64, 64).to(device)
-    o = model(x, decoder_input)
-
-    loss = loss_function(o, decoder_output_label.to(device).long())
-
-    print(loss)
-

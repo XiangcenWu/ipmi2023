@@ -52,39 +52,6 @@ def kernel(x, sigma):
     return torch.exp(-x**2 / (2*sigma**2))
 
 
-# def term(l_small, alpha_small, l_big, alpha_big, sigma):
-#     b_small, _ = l_small.shape
-#     b_big, _ = l_big.shape
-
-#     x_0 = l_small.repeat_interleave(b_big, dim=0)
-#     x_1 = l_big.repeat_interleave(b_small, dim=0)
-
-
-#     # ||x_0 - x_1|| is of shape (b, b, num_dice)
-#     l2_norm = torch.norm(x_0 - x_1, dim=-1)
-#     aa = alpha_small @ alpha_big.t()
-#     aa = aa.flatten()
-#     aa = aa.flatten().reshape(b_small*b_big, 1)
-#     k = kernel(l2_norm, sigma)
-
-#     a_small = alpha_small.sum()
-#     a_big = alpha_big.sum()
-
-#     return ((1/(a_small*a_big + 0.001)) * aa * k).sum()
-
-
-# def weighted_mmd(distribution_0, weights_0, distribution_1, weights_1, sigma):
-#     """
-#     distribution's -> [num_sample, num_dice]
-#     weights' shape -> [num_sample, 1]
-#     """
-#     # print(distribution_0.shape, weights_0.shape, distribution_1.shape, weights_1.shape)
-#     term_1 = term(distribution_0, weights_0, distribution_0, weights_0, sigma)
-#     term_2 = term(distribution_1, weights_1, distribution_1, weights_1, sigma)
-#     term_3 = term(distribution_0, weights_0, distribution_1, weights_1, sigma)
-#     return term_1 + term_2 - 2*term_3
-
-
 def term(l_small, l_big, sigma):
     b_small, _ = l_small.shape
     b_big, _ = l_big.shape

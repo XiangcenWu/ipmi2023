@@ -24,8 +24,8 @@ from monai.transforms import (
     CenterSpatialCropd,
     SpatialPadd
 )
-from monai.losses import DiceLoss
-from loss import create_label, batch_wise_loss, dice_metric, one_hot_mmd_label
+
+from loss import  dice_metric, one_hot_mmd_label
 from monai.networks.nets.swin_unetr import SwinUNETR
 from model import SelectionNet
 #################################################
@@ -81,43 +81,49 @@ transforms = Compose(
 )
 
 
-num_sequence = 12
+num_sequence = 8
 
-selection_ds = Dataset(
+selection_ds = CacheDataset(
     data=D_meta_select,
     transform=transforms,
+    cache_num=2*num_sequence,
+    cache_rate=1.0,
+    num_workers=8,
 )
 selection_loader = DataLoader(
-    selection_ds, batch_size=num_sequence, shuffle=True, drop_last=False
+    selection_ds, batch_size=num_sequence, num_workers=8, shuffle=True, drop_last=True
 )
 device = 'cuda:0'
 # Set the networks and their optimizers
 f_seg = SwinUNETR((64, 64, 64), 1, 3).to(device)
-f_seg.load_state_dict(torch.load("/home/xiangcen/meta_data_select/model/f_seg_v1.pt"))
+f_seg.load_state_dict(torch.load("/home/xiangcen/meta_data_select/model/f_seg_v1.pt", map_location=device))
 f_seg.eval()
-f_select = SelectionNet(num_sequence, 1024, 8, 6, 6).to(device)
+f_select = SelectionNet(num_sequence, 2560, 16, 8, 8).to(device)
 optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.001)
 loss_function = torch.nn.CrossEntropyLoss()
 
 
 
 if __name__ == "__main__":
-    for batch in selection_loader:
-        img, label = batch["image"].to(device), batch["label"].to(device)
-        with torch.no_grad():
-            pred = f_seg(img)
-            performance = dice_metric(pred, label)
+    for _ in range(1500):
+        for batch in selection_loader:
+            img, label = batch["image"].to(device), batch["label"].to(device)
+            with torch.no_grad():
+                pred = f_seg(img)
+                performance = dice_metric(pred, label)
 
-        decoder_input, decoder_output_label = one_hot_mmd_label(performance, 3.)
-        
+            decoder_input, decoder_output_label = one_hot_mmd_label(performance, 3.)
+            
 
-        o = f_select(img, decoder_input)
-        print("label", decoder_output_label)
-        print("pred", torch.argmax(o, 1))
+            o = f_select(img, decoder_input)
+            print("label", decoder_output_label)
+            print("pred", torch.argmax(o, 1))
 
-        loss = loss_function(o, decoder_output_label.to(device).long())
-        print(loss.item())
+            loss = loss_function(o, decoder_output_label.to(device).long())
+            print(loss.item())
 
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        if _ // 100 == 0:
+            torch.save(f_select.state_dict(), "./my_model.pt")
