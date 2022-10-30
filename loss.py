@@ -125,10 +125,10 @@ def one_hot_mmd_label(predicted_dice, sigma):
     # # decoder input     decoder output label
     # return torch.cat([bos, label], dim=0), torch.cat([label, eos], dim=0)
 
-    return torch.cat([torch.tensor([batch]), rank]), torch.cat([rank, torch.tensor([batch])])
+    return rank
 
 if __name__ == "__main__":
     x = torch.rand(4, 3)
     label = one_hot_mmd_label(x, 3.)
-    print(F.one_hot(label[0]))
+    print(label)
 

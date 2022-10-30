@@ -43,8 +43,9 @@ num_of_segmentation = (281 - 21) // 2
 # Partition data
 D_test = datalist[:num_of_test]
 D_meta_train = datalist[num_of_test : num_of_test + num_of_segmentation]
-D_meta_select = datalist[num_of_test + num_of_segmentation : ]
-print("Test data: ", len(D_test), ", Segmentation Data: ", len(D_meta_train), ", Selection Data: ", len(D_meta_select))
+D_meta_select = datalist[num_of_test + num_of_segmentation : ] # 130
+
+D_meat_select_real = D_meta_select[:8]
 ####################################################
 transforms = Compose(
     [
@@ -81,49 +82,46 @@ transforms = Compose(
 )
 
 
-num_sequence = 8
+num_sequence = 4
 
 selection_ds = CacheDataset(
-    data=D_meta_select,
+    data=D_meat_select_real,
     transform=transforms,
-    cache_num=2*num_sequence,
+    cache_num=num_sequence,
     cache_rate=1.0,
     num_workers=8,
 )
 selection_loader = DataLoader(
     selection_ds, batch_size=num_sequence, num_workers=8, shuffle=True, drop_last=True
 )
-device = 'cuda:0'
+device = 'cuda:1'
 # Set the networks and their optimizers
 f_seg = SwinUNETR((64, 64, 64), 1, 3).to(device)
 f_seg.load_state_dict(torch.load("/home/xiangcen/meta_data_select/model/f_seg_v1.pt", map_location=device))
 f_seg.eval()
-f_select = SelectionNet(num_sequence, 2560, 16, 8, 8).to(device)
-optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.001)
+f_select = SelectionNet(num_sequence, 512, 1, 1).to(device)
+optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.01)
 loss_function = torch.nn.CrossEntropyLoss()
 
 
 
 if __name__ == "__main__":
-    for _ in range(1500):
-        for batch in selection_loader:
-            img, label = batch["image"].to(device), batch["label"].to(device)
-            with torch.no_grad():
-                pred = f_seg(img)
-                performance = dice_metric(pred, label)
+    batch = next(iter(selection_loader))
 
-            decoder_input, decoder_output_label = one_hot_mmd_label(performance, 3.)
-            
+    img, label = batch["image"].to(device), batch["label"].to(device)
 
-            o = f_select(img, decoder_input)
-            print("label", decoder_output_label)
-            print("pred", torch.argmax(o, 1))
+    decoder_output_label = torch.tensor([0, 1, 2, 3])
+    decoder_output_label = decoder_output_label.to(device).long()
+    for _ in range(1200):
 
-            loss = loss_function(o, decoder_output_label.to(device).long())
-            print(loss.item())
+        o = f_select(img)
+        
+        print("pred", torch.argmax(o, 1))
+        
 
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        if _ // 100 == 0:
-            torch.save(f_select.state_dict(), "./my_model.pt")
+        loss = loss_function(o, decoder_output_label)
+        print(loss.item())
+
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()

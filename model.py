@@ -5,48 +5,30 @@ import torch.nn.functional as F
 
 class SelectionNet(nn.Module):
 
-    def __init__(self, num_sequence, d_model, n_head, num_encoder_layers, num_decoder_layers):
+    def __init__(self, num_sequence, d_model, n_head, num_encoder_layers):
+        
+
         super().__init__()
         self.num_sequence = num_sequence
-        self.relu = nn.ReLU()
         
         self.down_sample = DownSample([1, d_model // 16, d_model // 8, d_model // 4, d_model // 2, d_model])
 
-
         self.pool_to_vector = nn.AvgPool3d((2, 2, 2))
 
+        self.transformer = nn.TransformerEncoderLayer(d_model=d_model, nhead=n_head, dim_feedforward=4*d_model, batch_first=True)
 
-        self.transformer = nn.Transformer(d_model, n_head, num_encoder_layers, num_decoder_layers)
-
-        self.output_embedding = nn.Linear(num_sequence+1, d_model, bias=False)
-
-        self.output = nn.Linear(d_model, num_sequence+1, )
-
-        
+        self.output = nn.Linear(d_model, num_sequence)
 
 
-    def forward(self, x, decoder_input):
+    def forward(self, x):
         feature = self.down_sample(x)
-        feature = self.pool_to_vector(feature).flatten(1) # [B, feature]
-
-
-        decoder_input = F.one_hot(decoder_input).to(x.device).float()
-        decoder_input = self.output_embedding(decoder_input)
-
-
-        mask = self.transformer.generate_square_subsequent_mask(self.num_sequence + 1).to(x.device)
-        decoder_output = self.transformer(feature, decoder_input, tgt_mask=mask)
-
-
-        return self.output(decoder_output)
-
-
-
-
-
-
-
+        feature = self.pool_to_vector(feature).flatten(1).unsqueeze(0) 
         
+
+        feature = self.transformer(feature)
+
+
+        return self.output(feature).squeeze(0)
 
 
 class DownSample(nn.Module):
@@ -115,3 +97,21 @@ class ResBlock(nn.Module):
             nn.Conv3d(num_in, num_in, 3, 1, 1),
             nn.Conv3d(num_in, num_in, 1),
         )
+
+
+if __name__ == "__main__":
+    model = SelectionNet(4, 512, 1, 1, 1).to("cuda:0")
+    x = torch.rand(4, 1, 64, 64, 64).to("cuda:0")
+    l = torch.tensor([0, 1, 2, 3]).to("cuda:0")
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr = 0.01)
+    for _ in range(1000):
+        o = model(x)
+        loss = loss_function(o, l)
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        print(l)
+        print(torch.argmax(o, 1))
+        print(o)
+        
