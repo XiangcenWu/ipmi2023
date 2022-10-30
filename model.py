@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class SelectionNet(nn.Module):
 
-    def __init__(self, num_sequence, d_model, n_head, num_encoder_layers):
+    def __init__(self, num_sequence, d_model):
         
 
         super().__init__()
@@ -15,20 +15,71 @@ class SelectionNet(nn.Module):
 
         self.pool_to_vector = nn.AvgPool3d((2, 2, 2))
 
-        self.transformer = nn.TransformerEncoderLayer(d_model=d_model, nhead=n_head, dim_feedforward=4*d_model, batch_first=True)
+        # self.transformer = nn.ModuleList([Attention(d_model) for i in range(3)])
+        self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, 8), 2)
+
+
 
         self.output = nn.Linear(d_model, num_sequence)
 
 
     def forward(self, x):
+        
         feature = self.down_sample(x)
-        feature = self.pool_to_vector(feature).flatten(1).unsqueeze(0) 
+        feature = self.pool_to_vector(feature).flatten(1)
+
+        
         
 
+      
         feature = self.transformer(feature)
 
 
-        return self.output(feature).squeeze(0)
+        return self.output(feature)
+
+
+class Attention(nn.Module):
+
+    def __init__(self, d_model):
+        super().__init__()
+        self.q = nn.Linear(d_model, d_model, bias=False)
+        self.k = nn.Linear(d_model, d_model, bias=False)
+        self.v = nn.Linear(d_model, d_model)
+        self.scale = d_model ** -0.5
+
+        self.layernorm_0 = nn.LayerNorm(d_model)
+
+        self.ffd = nn.Sequential(
+            nn.Linear(d_model, 4*d_model),
+            nn.Linear(4*d_model, d_model)
+        )
+
+        self.layernorm_1 = nn.LayerNorm(d_model)
+
+
+
+    def forward(self, x):
+        skip = x
+        q = self.q(x)
+        k = self.k(x)
+        v = self.v(x)
+
+        attn = self.scale * q @ k.transpose(0, 1)
+        attn = attn.softmax(-1)
+        print(attn)
+
+        attn = attn @ v
+        attn = self.layernorm_0(skip + attn)
+        skip = attn
+
+        ffd = self.ffd(attn)
+        ffd = self.layernorm_1(ffd + skip)
+
+        
+
+        return ffd
+
+
 
 
 class DownSample(nn.Module):
