@@ -34,7 +34,7 @@ from model import SelectionNet
 
 
 
-data_dir = "/home/xiangcen/meta_data_select/data/Task07_Pancreas/dataset.json"
+data_dir = "D:\medical_data\Task07_Pancreas\dataset.json"
 datalist = load_decathlon_datalist(data_dir, True, "training")
 
 
@@ -45,7 +45,7 @@ D_test = datalist[:num_of_test]
 D_meta_train = datalist[num_of_test : num_of_test + num_of_segmentation]
 D_meta_select = datalist[num_of_test + num_of_segmentation : ] # 130
 
-D_meat_select_real = D_meta_select[:8]
+
 ####################################################
 transforms = Compose(
     [
@@ -82,37 +82,33 @@ transforms = Compose(
 )
 
 
-num_sequence = 4
+num_sequence = 5
 
-selection_ds = CacheDataset(
-    data=D_meat_select_real,
+selection_ds = Dataset(
+    data=D_meta_select,
     transform=transforms,
-    cache_num=num_sequence,
-    cache_rate=1.0,
-    num_workers=8,
+
 )
 selection_loader = DataLoader(
-    selection_ds, batch_size=num_sequence, num_workers=8, shuffle=True, drop_last=True
+    selection_ds, batch_size=num_sequence, shuffle=True, drop_last=True
 )
-device = 'cuda:1'
-# Set the networks and their optimizers
-f_seg = SwinUNETR((64, 64, 64), 1, 3).to(device)
-f_seg.load_state_dict(torch.load("/home/xiangcen/meta_data_select/model/f_seg_v1.pt", map_location=device))
-f_seg.eval()
-f_select = SelectionNet(num_sequence, 512, 1, 1).to(device)
+device = 'cuda'
+
+
+f_select = SelectionNet(num_sequence, 512).to(device)
 optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.01)
 loss_function = torch.nn.CrossEntropyLoss()
 
 
 
 if __name__ == "__main__":
-    batch = next(iter(selection_loader))
+    for batch in selection_loader:
 
     img, label = batch["image"].to(device), batch["label"].to(device)
 
-    decoder_output_label = torch.tensor([0, 1, 2, 3])
+    decoder_output_label = torch.tensor([3, 3, 3, 3])
     decoder_output_label = decoder_output_label.to(device).long()
-    for _ in range(1200):
+    for _ in range(1000):
 
         o = f_select(img)
         
