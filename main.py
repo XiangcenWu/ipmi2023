@@ -34,7 +34,7 @@ from model import SelectionNet
 
 
 
-data_dir = "D:\medical_data\Task07_Pancreas\dataset.json"
+data_dir = "/raid/candi/xiangcen/meta_data_select/ipmi2023/data/Task07_Pancreas/dataset.json"
 datalist = load_decathlon_datalist(data_dir, True, "training")
 
 
@@ -44,7 +44,8 @@ num_of_segmentation = (281 - 21) // 2
 D_test = datalist[:num_of_test]
 D_meta_train = datalist[num_of_test : num_of_test + num_of_segmentation]
 D_meta_select = datalist[num_of_test + num_of_segmentation : ] # 130
-
+D_meta_select_part1 = D_meta_select[:65]
+D_meta_select_patr2 = D_meta_select[65:]
 
 ####################################################
 transforms = Compose(
@@ -84,40 +85,57 @@ transforms = Compose(
 
 num_sequence = 5
 
-selection_ds = Dataset(
-    data=D_meta_select,
+selection_ds = CacheDataset(
+    data=D_meta_select_part1,
     transform=transforms,
+    cache_num=8*num_sequence,
+    cache_rate=1.0,
+    num_workers=8,
 
 )
 selection_loader = DataLoader(
-    selection_ds, batch_size=num_sequence, shuffle=True, drop_last=True
+    selection_ds, batch_size=num_sequence, num_workers=8, shuffle=True, drop_last=True
 )
-device = 'cuda'
+device = 'cuda:2'
 
 
-f_select = SelectionNet(num_sequence, 512).to(device)
+# Set the networks and their optimizers
+f_seg = SwinUNETR((64, 64, 64), 1, 3).to(device)
+f_seg.load_state_dict(torch.load("/raid/candi/xiangcen/meta_data_select/ipmi2023/ipmi2023/f_seg_v1.pt", map_location=device))
+f_seg.eval()
+
+
+
+f_select = SelectionNet(num_sequence, 2048).to(device)
 optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.01)
 loss_function = torch.nn.CrossEntropyLoss()
 
 
 
 if __name__ == "__main__":
-    for batch in selection_loader:
-
-    img, label = batch["image"].to(device), batch["label"].to(device)
-
-    decoder_output_label = torch.tensor([3, 3, 3, 3])
-    decoder_output_label = decoder_output_label.to(device).long()
     for _ in range(1000):
+        for i, batch in enumerate(selection_loader):
 
-        o = f_select(img)
+            img, label = batch["image"].to(device), batch["label"].to(device)
+            with torch.no_grad():
+                pred = f_seg(img)
+                performance = dice_metric(pred, label)
+            label_transformer = one_hot_mmd_label(performance, 3.)
+
+            o = f_select(img)
+
+            print("label", label_transformer)
+            print("pred", torch.argmax(o, 1))
+
+            loss = loss_function(o, label_transformer.to(device).long())
+            print(loss.item())
+
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+
+            if i // 100 == 0:
+                torch.save(f_select.state_dict(), './F_SEL_not_cls.pt')
+
         
-        print("pred", torch.argmax(o, 1))
-        
-
-        loss = loss_function(o, decoder_output_label)
-        print(loss.item())
-
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
