@@ -34,7 +34,7 @@ from model import SelectionNet
 
 
 
-data_dir = "/raid/candi/xiangcen/meta_data_select/ipmi2023/data/Task07_Pancreas/dataset.json"
+data_dir = "../data/Task07_Pancreas/dataset.json"
 datalist = load_decathlon_datalist(data_dir, True, "training")
 
 
@@ -44,8 +44,8 @@ num_of_segmentation = (281 - 21) // 2
 D_test = datalist[:num_of_test]
 D_meta_train = datalist[num_of_test : num_of_test + num_of_segmentation]
 D_meta_select = datalist[num_of_test + num_of_segmentation : ] # 130
-D_meta_select_part1 = D_meta_select[:65]
-D_meta_select_patr2 = D_meta_select[65:]
+D_meta_select_part1 = D_meta_select[:80]
+D_meta_select_patr2 = D_meta_select[80:]
 
 ####################################################
 transforms = Compose(
@@ -94,26 +94,26 @@ selection_ds = CacheDataset(
 
 )
 selection_loader = DataLoader(
-    selection_ds, batch_size=num_sequence, num_workers=8, shuffle=True, drop_last=True
+    selection_ds, batch_size=num_sequence, num_workers=8, shuffle=False, drop_last=True
 )
 device = 'cuda:2'
 
 
 # Set the networks and their optimizers
 f_seg = SwinUNETR((64, 64, 64), 1, 3).to(device)
-f_seg.load_state_dict(torch.load("/raid/candi/xiangcen/meta_data_select/ipmi2023/ipmi2023/f_seg_v1.pt", map_location=device))
+f_seg.load_state_dict(torch.load("./f_seg_v1.pt", map_location=device))
 f_seg.eval()
 
 
 
 f_select = SelectionNet(num_sequence, 2048).to(device)
-optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.01)
+optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.003)
 loss_function = torch.nn.CrossEntropyLoss()
 
 
 
 if __name__ == "__main__":
-    for _ in range(1000):
+    for _ in range(1601):
         for i, batch in enumerate(selection_loader):
 
             img, label = batch["image"].to(device), batch["label"].to(device)
@@ -134,8 +134,10 @@ if __name__ == "__main__":
             optimizer.step()
             optimizer.zero_grad()
 
+            print("This is epoch {}".format(_))
 
-            if i // 100 == 0:
-                torch.save(f_select.state_dict(), './F_SEL_not_cls.pt')
+
+        if _ // 10 == 0:
+            torch.save(f_select.state_dict(), './F_SEL_not_cls.pt')
 
         

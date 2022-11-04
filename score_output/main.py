@@ -28,14 +28,13 @@ from monai.transforms import (
 from loss import  dice_metric, one_hot_mmd_label
 from monai.networks.nets.swin_unetr import SwinUNETR
 from model import SelectionNet
-from loss import one_hot_mmd_label, mmd
 #################################################
 # Hyperparameters
 
 
 
 
-data_dir = "/raid/candi/xiangcen/meta_data_select/data/Task07_Pancreas/dataset.json"
+data_dir = "../data/Task07_Pancreas/dataset.json"
 datalist = load_decathlon_datalist(data_dir, True, "training")
 
 
@@ -87,71 +86,60 @@ transforms = Compose(
 num_sequence = 5
 
 selection_ds = CacheDataset(
-    data=D_meta_select_patr2,
+    data=D_meta_select_part1,
     transform=transforms,
-    cache_num=num_sequence,
+    cache_num=8*num_sequence,
     cache_rate=1.0,
     num_workers=8,
 
 )
 selection_loader = DataLoader(
-    selection_ds, batch_size=num_sequence, num_workers=8, shuffle=True, drop_last=True
+    selection_ds, batch_size=num_sequence, num_workers=8, shuffle=False, drop_last=True
 )
-device = 'cuda:0'
+device = 'cuda:1'
 
 
 # Set the networks and their optimizers
-f_seg = SwinUNETR((64, 64, 64), 1, 3)
+f_seg = SwinUNETR((64, 64, 64), 1, 3).to(device)
 f_seg.load_state_dict(torch.load("./f_seg_v1.pt", map_location=device))
-f_seg.to(device)
 f_seg.eval()
 
 
 
-f_select = SelectionNet(num_sequence, 2048)
-f_select.load_state_dict(torch.load("/raid/candi/xiangcen/meta_data_select/ipmi2023/F_SEL_not_cls.pt", map_location=device))
-f_select.to(device)
-
-
-overall = []
-sel = []
-for batch in selection_loader:
-    img, label = batch["image"].to(device), batch["label"].to(device)
-
-    with torch.no_grad():
-        selection = torch.argmax(f_select(img).sum(dim=0))
-        pred = f_seg(img)
-        performance = dice_metric(pred, label)
-
-
-        selected = performance[selection.item()]
-        print(selection)
-        print(performance)
-
-        sel.append(selected)
-        overall.append(performance)
+f_select = SelectionNet(num_sequence, 2048).to(device)
+optimizer = torch.optim.Adam(f_select.parameters(), lr = 0.01)
+loss_function = torch.nn.CrossEntropyLoss()
 
 
 
-sel = torch.stack(sel)
-overall = torch.stack(overall, dim=0).view(-1, 3)
+if __name__ == "__main__":
+    for _ in range(1200):
+        for i, batch in enumerate(selection_loader):
+
+            img, label = batch["image"].to(device), batch["label"].to(device)
+            with torch.no_grad():
+                pred = f_seg(img)
+                performance = dice_metric(pred, label)
+            label_transformer = one_hot_mmd_label(performance, 3.)[0]
+            
+
+            o = f_select(img).view(5, )
 
 
 
-print(mmd(sel, overall, 3.))
-
-for i in range(9):
-    print(mmd(overall[torch.randint(0, 50, (10, ))], overall, 3.))
+            loss = loss_function(o, label_transformer.to(device).long())
 
 
-overall_mean = overall.mean(0)
-print(     torch.abs(sel.mean(0) - overall.mean(0))     /       overall_mean            )
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            print("Epoch {}, iteration {}, label {}, pred {}, loss {}".format(_, i, label_transformer.item(), torch.argmax(o).item(), loss.item()))
 
 
-for i in range(10):
-    rand_selection = overall[torch.randint(0, 50, (10, ))].mean(0)
-
-    print(torch.abs(rand_selection - overall_mean  ) / overall_mean)
+        if _ // 10 == 0:
+            torch.save(f_select.state_dict(), './F_SEL_output_one_num_v2.pt')
 
 
 
+        
