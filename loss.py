@@ -118,7 +118,7 @@ def one_hot_mmd_label(predicted_dice, sigma):
     rank = torch.tensor(rankdata(mmd_score, 'min') - 1)
     label = torch.argmin(rank)
 
-    return label.repeat(1, batch).flatten(0)
+    return label.repeat(1, batch).flatten(0)[0]
 
 if __name__ == "__main__":
     x = torch.rand(4, 3)

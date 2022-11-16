@@ -96,7 +96,7 @@ selection_ds = CacheDataset(
 selection_loader = DataLoader(
     selection_ds, batch_size=num_sequence, num_workers=8, shuffle=False, drop_last=True
 )
-device = 'cuda:2'
+device = 'cpu'
 
 
 # Set the networks and their optimizers

@@ -18,11 +18,11 @@ class SelectionNet(nn.Module):
         
         self.bn = nn.BatchNorm1d(d_model)
 
-        self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, 16), 8)
+        self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, 16, batch_first=True), 8)
 
 
 
-        self.output = nn.Linear(d_model, num_sequence)
+        self.output = nn.Linear(d_model, 1)
 
 
     def forward(self, x):
@@ -30,58 +30,16 @@ class SelectionNet(nn.Module):
         feature = self.down_sample(x)
         feature = self.pool_to_vector(feature).flatten(1)
 
-        feature = self.bn(feature)
+        feature = self.bn(feature).unsqueeze(0)
 
-        
-        
 
-      
+
+
+
         feature = self.transformer(feature)
 
 
-        return self.output(feature)
-
-
-class Attention(nn.Module):
-
-    def __init__(self, d_model):
-        super().__init__()
-        self.q = nn.Linear(d_model, d_model, bias=False)
-        self.k = nn.Linear(d_model, d_model, bias=False)
-        self.v = nn.Linear(d_model, d_model)
-        self.scale = d_model ** -0.5
-
-        self.layernorm_0 = nn.LayerNorm(d_model)
-
-        self.ffd = nn.Sequential(
-            nn.Linear(d_model, 4*d_model),
-            nn.Linear(4*d_model, d_model)
-        )
-
-        self.layernorm_1 = nn.LayerNorm(d_model)
-
-
-
-    def forward(self, x):
-        skip = x
-        q = self.q(x)
-        k = self.k(x)
-        v = self.v(x)
-
-        attn = self.scale * q @ k.transpose(0, 1)
-        attn = attn.softmax(-1)
-        print(attn)
-
-        attn = attn @ v
-        attn = self.layernorm_0(skip + attn)
-        skip = attn
-
-        ffd = self.ffd(attn)
-        ffd = self.layernorm_1(ffd + skip)
-
-        
-
-        return ffd
+        return self.output(feature).squeeze(0).flatten()
 
 
 
@@ -128,10 +86,10 @@ class DownSample(nn.Module):
             nn.AvgPool3d(2),
             nn.Conv3d(self.feature_list[i_th_block], self.feature_list[i_th_block+1], 1),
             ResBlock(self.feature_list[i_th_block+1], 3),
-            nn.BatchNorm3d(self.feature_list[i_th_block+1]),
+            # nn.BatchNorm3d(self.feature_list[i_th_block+1]),
             nn.ReLU()
         )
-        
+
 
 class ResBlock(nn.Module):
 
@@ -155,18 +113,6 @@ class ResBlock(nn.Module):
 
 
 if __name__ == "__main__":
-    model = SelectionNet(4, 512, 1, 1, 1).to("cuda:0")
-    x = torch.rand(4, 1, 64, 64, 64).to("cuda:0")
-    l = torch.tensor([0, 1, 2, 3]).to("cuda:0")
-    loss_function = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr = 0.01)
-    for _ in range(1000):
-        o = model(x)
-        loss = loss_function(o, l)
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        print(l)
-        print(torch.argmax(o, 1))
-        print(o)
-        
+    model = SelectionNet(5, 2048)
+    o = model(torch.rand(5, 1, 64, 64, 64))
+    print(o.shape)
