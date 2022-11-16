@@ -15,7 +15,9 @@ class SelectionNet(nn.Module):
 
         self.pool_to_vector = nn.AvgPool3d((2, 2, 2))
 
-        # self.transformer = nn.ModuleList([Attention(d_model) for i in range(3)])
+        
+        self.bn = nn.BatchNorm1d(d_model)
+
         self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, 16), 8)
 
 
@@ -27,6 +29,8 @@ class SelectionNet(nn.Module):
         
         feature = self.down_sample(x)
         feature = self.pool_to_vector(feature).flatten(1)
+
+        feature = self.bn(feature)
 
         
         

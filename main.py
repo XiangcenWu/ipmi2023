@@ -83,12 +83,12 @@ transforms = Compose(
 )
 
 
-num_sequence = 5
+num_sequence = 10
 
 selection_ds = CacheDataset(
     data=D_meta_select_part1,
     transform=transforms,
-    cache_num=8*num_sequence,
+    cache_num=num_sequence,
     cache_rate=1.0,
     num_workers=8,
 
@@ -135,9 +135,5 @@ if __name__ == "__main__":
             optimizer.zero_grad()
 
             print("This is epoch {}".format(_))
-
-
-        if _ // 10 == 0:
-            torch.save(f_select.state_dict(), './F_SEL_not_cls.pt')
 
         

@@ -2,3 +2,4 @@ data
 __pycache__
 my_model.pt
 F_SEL_not_cls.pt
+test*
