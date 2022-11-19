@@ -25,11 +25,14 @@ from monai.transforms import (
     SpatialPadd
 )
 import numpy as np
-
+import argparse
 from loss import  dice_metric, one_hot_mmd_label
 from monai.networks.nets.swin_unetr import SwinUNETR
 from model import SelectionNet
 #################################################
+parser = argparse.ArgumentParser()
+parser.add_argument('shuffle', type=bool, help='Shuffle the training data')
+args = parser.parse_args()
 # Hyperparameters
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -95,7 +98,7 @@ selection_ds = CacheDataset(
 
 )
 selection_loader = DataLoader(
-    selection_ds, batch_size=num_sequence, num_workers=16, shuffle=False, drop_last=True
+    selection_ds, batch_size=num_sequence, num_workers=16, shuffle=args.shuffle, drop_last=True
 )
 
 selection_ds_test = CacheDataset(
@@ -108,7 +111,7 @@ selection_ds_test = CacheDataset(
 )
 
 selection_loader_test = DataLoader(
-    selection_ds, batch_size=num_sequence, num_workers=16, shuffle=False, drop_last=True
+    selection_ds_test, batch_size=num_sequence, num_workers=16, shuffle=False, drop_last=True
 )
 device = 'cuda:0'
 
@@ -138,7 +141,7 @@ if __name__ == "__main__":
         for i, batch in enumerate(selection_loader):
 
             # train
-            if torch.rand((1, )) >= 0.2:
+            if torch.rand((1, )) > 0.2:
                 num_step += 1
                 img, label = batch["image"].to(device), batch["label"].to(device)
                 with torch.no_grad():
@@ -157,6 +160,11 @@ if __name__ == "__main__":
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
+
+        # save model and save train loss
+        torch.save(f_select.state_dict(), "/home/xiangcen/ipmi2023/f_selection_v2.pt")
+        loss_list.append(loss_batch / num_step)
+        torch.save(torch.tensor(loss_list), "/home/xiangcen/ipmi2023/loss_list.pt")
 
         num_step = 0.001
         # test
@@ -178,8 +186,7 @@ if __name__ == "__main__":
 
 
 
-        torch.save(f_select.state_dict(), "/home/xiangcen/ipmi2023/f_selection.pt")
-        loss_list.append(loss_batch / num_step)
+        
+        # save testing loss
         loss_list_test.append(loss_batch_test / num_step)
-        torch.save(torch.tensor(loss_list), "/home/xiangcen/ipmi2023/loss_list.pt")
         torch.save(torch.tensor(loss_list_test), "/home/xiangcen/ipmi2023/loss_list_test.pt")
