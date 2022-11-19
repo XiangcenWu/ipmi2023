@@ -18,11 +18,23 @@ class SelectionNet(nn.Module):
         
         self.bn = nn.BatchNorm1d(d_model)
 
-        self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, 16, batch_first=True), 8)
+        self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, 16, batch_first=True), 1)
 
 
 
-        self.output = nn.Linear(d_model, 1)
+        self.output = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.ReLU(),
+            # nn.Dropout(0.1),
+            nn.Linear(d_model // 2, d_model // 4),
+            nn.ReLU(),
+            # nn.Dropout(0.1),
+            nn.Linear(d_model // 4, d_model // 8),
+            nn.ReLU(),
+            nn.Linear(d_model // 8, 1),
+
+
+        )
 
 
     def forward(self, x):
@@ -30,7 +42,9 @@ class SelectionNet(nn.Module):
         feature = self.down_sample(x)
         feature = self.pool_to_vector(feature).flatten(1)
 
-        feature = self.bn(feature).unsqueeze(0)
+        # bn
+
+        feature = feature.unsqueeze(0)
 
 
 
@@ -108,11 +122,12 @@ class ResBlock(nn.Module):
         return nn.Sequential(
             nn.Conv3d(num_in, num_in, 1),
             nn.Conv3d(num_in, num_in, 3, 1, 1),
-            nn.Conv3d(num_in, num_in, 1),
+            nn.Conv3d(num_in, num_in, 1)
         )
 
 
 if __name__ == "__main__":
-    model = SelectionNet(5, 2048)
-    o = model(torch.rand(5, 1, 64, 64, 64))
+    device = "cuda:0"
+    model = SelectionNet(5, 2048).to(device)
+    o = model(torch.rand(5, 1, 64, 64, 64).to(device))
     print(o.shape)

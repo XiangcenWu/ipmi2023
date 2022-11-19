@@ -3,3 +3,9 @@ __pycache__
 my_model.pt
 F_SEL_not_cls.pt
 test*
+
+
+
+loss_list_test.pt
+loss_list.pt
+f_selection.pt

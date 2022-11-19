@@ -84,35 +84,37 @@ def mmd(distribution_0, distribution_1, sigma):
 
 
 
-def create_label(num_batch, predicted_dice, sigma=1.):
-    num_val = 1
-    i_all = torch.arange(0, num_batch, 1, dtype=torch.long).tolist()
-    combinations = torch.combinations(torch.arange(0, num_batch, 1, dtype=torch.long), r=num_val)
+# def create_label(num_batch, predicted_dice, sigma=1.):
+#     num_val = 1
+#     i_all = torch.arange(0, num_batch, 1, dtype=torch.long).tolist()
+#     combinations = torch.combinations(torch.arange(0, num_batch, 1, dtype=torch.long), r=num_val)
 
-    smallest_loss, best_comb = 100000., None
-    for comb in combinations:
-        comb = comb.tolist()
-        val_dice = predicted_dice[comb]
-        train_dice = predicted_dice[[x for x in i_all if x not in comb]]
+#     smallest_loss, best_comb = 100000., None
+#     for comb in combinations:
+#         comb = comb.tolist()
+#         val_dice = predicted_dice[comb]
+#         train_dice = predicted_dice[[x for x in i_all if x not in comb]]
         
-        mmd_loss = mmd(val_dice, train_dice, sigma)
-        # print(mmd_loss)
-        if mmd_loss < smallest_loss:
-            smallest_loss = mmd_loss
-            best_comb = comb
+#         mmd_loss = mmd(val_dice, train_dice, sigma)
+#         # print(mmd_loss)
+#         if mmd_loss < smallest_loss:
+#             smallest_loss = mmd_loss
+#             best_comb = comb
 
-    label = torch.zeros(num_batch, device=predicted_dice.device)
-    label[best_comb] = 1.
+#     label = torch.zeros(num_batch, device=predicted_dice.device)
+#     label[best_comb] = 1.
     
-    return label.view(num_batch, 1), best_comb[0]
+#     return label.view(num_batch, 1), best_comb[0]
 
 
 def one_hot_mmd_label(predicted_dice, sigma):
     batch, _ = predicted_dice.shape
     mmd_score = torch.zeros(batch)
+    predicted_dice = predicted_dice[:, 1].view(batch, 1)
+    
 
     for i in range(batch):
-        mmd_i = mmd(predicted_dice[i].view(-1, 3), predicted_dice.view(-1, 3), 3.)
+        mmd_i = mmd(predicted_dice[i].view(-1, 1), predicted_dice.view(-1, 1), 3.)
         mmd_score[i] = mmd_i
 
     rank = torch.tensor(rankdata(mmd_score, 'min') - 1)
@@ -121,7 +123,7 @@ def one_hot_mmd_label(predicted_dice, sigma):
     return label.repeat(1, batch).flatten(0)[0]
 
 if __name__ == "__main__":
-    x = torch.rand(4, 3)
+    x = torch.rand(5, 3)
     label = one_hot_mmd_label(x, 3.)
     print(label)
 
