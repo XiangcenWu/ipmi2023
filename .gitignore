@@ -1,14 +1,5 @@
 data
 __pycache__
-my_model.pt
-F_SEL_not_cls.pt
+*.pt
 test*
 
-
-
-loss_list_test.pt
-loss_list.pt
-f_selection.pt
-f_selection_v2.pt
-f_selection_epoch100.pt
-see.ipynb

@@ -24,14 +24,22 @@ from monai.transforms import (
     CenterSpatialCropd,
     SpatialPadd
 )
+
+
 import numpy as np
 import argparse
 from loss import  dice_metric, one_hot_mmd_label
 from monai.networks.nets.swin_unetr import SwinUNETR
-from model import SelectionNet
+from model import SelectionNet, SelectionNetCat
 #################################################
 parser = argparse.ArgumentParser()
+parser.add_argument('device', type=str, help='device to calculate')
 parser.add_argument('shuffle', type=bool, help='Shuffle the training data')
+parser.add_argument('cat', type=bool, help='Shuffle the training data')
+parser.add_argument('nickname', type=str, help='saved stuff nickname')
+parser.add_argument('num_train', type=int, help="num of train images (num_test will be 130 - num_train)")
+parser.add_argument('learning_rate', type=float, help='Learning Rate of the Optimizer')
+parser.add_argument('momentum', type=float, help='momentum of the optimizer')
 args = parser.parse_args()
 # Hyperparameters
 torch.multiprocessing.set_sharing_strategy('file_system')
@@ -48,8 +56,8 @@ num_of_segmentation = (281 - 21) // 2
 D_test = datalist[:num_of_test]
 D_meta_train = datalist[num_of_test : num_of_test + num_of_segmentation]
 D_meta_select = datalist[num_of_test + num_of_segmentation : ] # 130
-D_meta_select_part1 = D_meta_select[:80]
-D_meta_select_patr2 = D_meta_select[80:]
+D_meta_select_part1 = D_meta_select[:args.num_train]
+D_meta_select_patr2 = D_meta_select[args.num_train:]
 
 ####################################################
 transforms = Compose(
@@ -113,7 +121,7 @@ selection_ds_test = CacheDataset(
 selection_loader_test = DataLoader(
     selection_ds_test, batch_size=num_sequence, num_workers=16, shuffle=False, drop_last=True
 )
-device = 'cuda:0'
+device = args.device
 
 
 # Set the networks and their optimizers
@@ -122,10 +130,12 @@ f_seg.load_state_dict(torch.load("/raid/candi/xiangcen/meta_data_select/ipmi2023
 f_seg.eval()
 
 
+if args.cat:
+    f_select = SelectionNetCat(num_sequence, 2048).to(device)
+else:
+    f_select = SelectionNet(num_sequence, 2048).to(device)
+optimizer = torch.optim.SGD(f_select.parameters(), lr = args.learning_rate, momentum=args.momentum)
 
-f_select = SelectionNet(num_sequence, 2048).to(device)
-optimizer = torch.optim.SGD(f_select.parameters(), lr = 0.00034, momentum=0.9)
-# optimizer = torch.optim.AdamW(f_select.parameters(), lr = 0.001)
 loss_function = torch.nn.CrossEntropyLoss()
 
 
@@ -151,8 +161,8 @@ if __name__ == "__main__":
                     performance = dice_metric(pred, label)
                 label_t = one_hot_mmd_label(performance, 3.)
 
-                
-
+                if args.cat:
+                    img = img.permute(1, 0, 2, 3, 4)
                 o = f_select(img)
 
                 loss = loss_function(o, label_t.to(device).long())
@@ -164,9 +174,9 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
 
         # save model and save train loss
-        torch.save(f_select.state_dict(), "./f_selection_False.pt")
+        torch.save(f_select.state_dict(), "./f_selection_" + args.nickname + ".pt")
         loss_list.append(loss_batch / num_step)
-        torch.save(torch.tensor(loss_list), "./loss_list.pt")
+        torch.save(torch.tensor(loss_list), "./loss_list_" + args.nickname + ".pt")
 
         num_step = 0.001
         # test
@@ -180,7 +190,8 @@ if __name__ == "__main__":
             label_t = one_hot_mmd_label(performance, 3.)
 
             
-
+            if args.cat:
+                img = img.permute(1, 0, 2, 3, 4)
             o = f_select(img)
 
             loss = loss_function(o, label_t.to(device).long())
@@ -192,4 +203,4 @@ if __name__ == "__main__":
         
         # save testing loss
         loss_list_test.append(loss_batch_test / num_step)
-        torch.save(torch.tensor(loss_list_test), "./loss_list_test.pt")
+        torch.save(torch.tensor(loss_list_test), "./loss_list_test_" + args.nickname + ".pt")
