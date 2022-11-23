@@ -32,15 +32,25 @@ from loss import  dice_metric, one_hot_mmd_label
 from monai.networks.nets.swin_unetr import SwinUNETR
 from model import SelectionNet, SelectionNetCat
 #################################################
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 parser = argparse.ArgumentParser()
 parser.add_argument('device', type=str, help='device to calculate')
-parser.add_argument('shuffle', type=bool, help='Shuffle the training data')
-parser.add_argument('cat', type=bool, help='Shuffle the training data')
+parser.add_argument('shuffle', type=str2bool, help='Shuffle the training data')
+parser.add_argument('cat', type=str2bool, help='Cat version of the model')
 parser.add_argument('nickname', type=str, help='saved stuff nickname')
 parser.add_argument('num_train', type=int, help="num of train images (num_test will be 130 - num_train)")
 parser.add_argument('learning_rate', type=float, help='Learning Rate of the Optimizer')
-parser.add_argument('momentum', type=float, help='momentum of the optimizer')
+parser.add_argument('drop_batch', type=float, help='random drop some of the batch')
 args = parser.parse_args()
+print(args.shuffle, args.cat, args.nickname)
 # Hyperparameters
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -58,7 +68,7 @@ D_meta_train = datalist[num_of_test : num_of_test + num_of_segmentation]
 D_meta_select = datalist[num_of_test + num_of_segmentation : ] # 130
 D_meta_select_part1 = D_meta_select[:args.num_train]
 D_meta_select_patr2 = D_meta_select[args.num_train:]
-
+print(len(D_meta_select_part1))
 ####################################################
 transforms = Compose(
     [
@@ -108,7 +118,7 @@ selection_ds = CacheDataset(
 selection_loader = DataLoader(
     selection_ds, batch_size=num_sequence, num_workers=16, shuffle=args.shuffle, drop_last=True
 )
-
+##########################################################
 selection_ds_test = CacheDataset(
     data=D_meta_select_patr2,
     transform=transforms,
@@ -121,6 +131,7 @@ selection_ds_test = CacheDataset(
 selection_loader_test = DataLoader(
     selection_ds_test, batch_size=num_sequence, num_workers=16, shuffle=False, drop_last=True
 )
+##############################################
 device = args.device
 
 
@@ -134,7 +145,9 @@ if args.cat:
     f_select = SelectionNetCat(num_sequence, 2048).to(device)
 else:
     f_select = SelectionNet(num_sequence, 2048).to(device)
-optimizer = torch.optim.SGD(f_select.parameters(), lr = args.learning_rate, momentum=args.momentum)
+    print("gfdgfdgs")
+optimizer = torch.optim.Adam(f_select.parameters(), lr = args.learning_rate)
+# optimizer = torch.optim.Adam(f_select.parameters(), lr = args.learning_rate)
 
 loss_function = torch.nn.CrossEntropyLoss()
 
@@ -153,7 +166,8 @@ if __name__ == "__main__":
         for i, batch in enumerate(selection_loader):
 
             # train
-            if torch.rand((1, )) > 0.2:
+            
+            if torch.rand((1, )) > args.drop_batch:
                 num_step += 1
                 img, label = batch["image"].to(device), batch["label"].to(device)
                 with torch.no_grad():
@@ -178,6 +192,7 @@ if __name__ == "__main__":
         loss_list.append(loss_batch / num_step)
         torch.save(torch.tensor(loss_list), "./loss_list_" + args.nickname + ".pt")
 
+
         num_step = 0.001
         # test
         f_select.eval()
@@ -187,16 +202,16 @@ if __name__ == "__main__":
             with torch.no_grad():
                 pred = f_seg(img)
                 performance = dice_metric(pred, label)
-            label_t = one_hot_mmd_label(performance, 3.)
+                label_t = one_hot_mmd_label(performance, 3.)
 
-            
-            if args.cat:
-                img = img.permute(1, 0, 2, 3, 4)
-            o = f_select(img)
+                
+                if args.cat:
+                    img = img.permute(1, 0, 2, 3, 4)
+                o = f_select(img)
 
-            loss = loss_function(o, label_t.to(device).long())
-            loss_batch_test += loss.item()
-            print("loss: {}, label {}, prediction {}".format(loss.item(), label_t, o.cpu().detach().numpy()))
+                loss = loss_function(o, label_t.to(device).long())
+                loss_batch_test += loss.item()
+                print("loss: {}, label {}, prediction {}".format(loss.item(), label_t, o.cpu().detach().numpy()))
 
 
 

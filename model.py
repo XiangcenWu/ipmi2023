@@ -49,9 +49,6 @@ class SelectionNet(nn.Module):
 
         self.pool_to_vector = nn.AvgPool3d((2, 2, 2))
 
-        
-        self.bn = nn.BatchNorm1d(d_model)
-
         self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, 8, dropout=0, batch_first=True), 1)
 
 
@@ -69,6 +66,7 @@ class SelectionNet(nn.Module):
 
 
         )
+        
 
 
     def forward(self, x):
@@ -76,8 +74,6 @@ class SelectionNet(nn.Module):
         feature = self.down_sample(x)
         feature = self.pool_to_vector(feature).flatten(1)
 
-        # ln
-        feature = self.bn(feature)
 
         feature = feature.unsqueeze(0)
 
@@ -125,7 +121,7 @@ class DownSample(nn.Module):
         return nn.Sequential(
             nn.AvgPool3d(2),
             nn.Conv3d(self.feature_list[i_th_block], self.feature_list[i_th_block+1], 1),
-            ResBlock(self.feature_list[i_th_block+1], 3),
+            ResBlock(self.feature_list[i_th_block+1], 4),
             nn.BatchNorm3d(self.feature_list[i_th_block+1]),
             # nn.ReLU()
         )
@@ -147,13 +143,10 @@ class ResBlock(nn.Module):
     def _creat_block(self, num_in):
         # up is the resnet version down is more param version
         return nn.Sequential(
-            # nn.Conv3d(num_in, num_in, 1),
-            # nn.Conv3d(num_in, num_in, 3, 1, 1),
-            # nn.Conv3d(num_in, num_in, 1)
-
-
+            nn.Conv3d(num_in, num_in, 1),
             nn.Conv3d(num_in, num_in, 3, 1, 1),
-            nn.Conv3d(num_in, num_in, 3, 1, 1),
+            nn.Conv3d(num_in, num_in, 1)
+
 
         )
 
